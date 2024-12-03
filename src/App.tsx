@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import TradingViewWidget from './components/TradingViewWidget';
 import SymbolInput from './components/SymbolInput';
-import ChartControls from './components/ChartControls';
-import ChartPreview from './components/ChartPreview';
+import ChartUpload from './components/ChartUpload';
 import StrategyAnalysis from './components/StrategyAnalysis';
 import { analyzeChartWithStrategy } from './services/tradingStrategy';
 import type { StrategyAnalysis as StrategyAnalysisType } from './services/tradingStrategy';
@@ -20,13 +18,13 @@ function App() {
     setError(null);
   };
 
-  const handleScreenshot = (imageData: string) => {
+  const handleImageUpload = (imageData: string) => {
     setChartImage(imageData);
     setAnalysis(null);
     setError(null);
   };
 
-  const handleClosePreview = () => {
+  const handleClearImage = () => {
     setChartImage(null);
     setAnalysis(null);
     setError(null);
@@ -56,21 +54,13 @@ function App() {
         
         <div className="space-y-4">
           <div className="bg-white rounded-lg shadow-md p-4">
-            <SymbolInput 
-              symbol={symbol} 
-              onSymbolChange={setSymbol}
-              onSubmit={handleSymbolSubmit}
-            />
-            <ChartControls onScreenshot={handleScreenshot} />
-            <div className="h-[600px]">
-              <TradingViewWidget symbol={symbol} />
-            </div>
-          </div>
 
-          <ChartPreview 
-            imageData={chartImage} 
-            onClose={handleClosePreview}
-          />
+            <ChartUpload
+              onImageUpload={handleImageUpload}
+              currentImage={chartImage}
+              onClear={handleClearImage}
+            />
+          </div>
           
           {chartImage && (
             <div className="bg-white rounded-lg shadow-md p-4">

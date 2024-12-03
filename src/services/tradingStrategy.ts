@@ -67,7 +67,20 @@ const SYSTEM_PROMPT = `You are a professional day trader analyzing charts. Analy
   }
 }
 
-Return ONLY the JSON object with no additional text or explanation.`;
+Return ONLY the JSON object with no additional text or explanation.
+
+Use this strategy:
+
+1. 1 Hour - Look for trend (SPY)
+2. 1 Week - Support and Resistance zones (candles close in proximity)
+3. 1 Day - Look for gaps not filled
+Candle patterns - engulfing or harami
+4. 1 Hour - Verify S&R Levels
+5. 5 Min - High/low of prev day and pre market
+6. 2 Min - Break above 9 EMA and Resistance level - ENTER TRADE
+7. Stop Loss at 9EMA or Consolidation Low
+
+`;
 
 export async function analyzeChartWithStrategy(imageBase64: string): Promise<StrategyAnalysis> {
   try {
