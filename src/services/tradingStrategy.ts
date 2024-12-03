@@ -1,4 +1,9 @@
-import { format } from 'date-fns';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true
+});
 
 export interface StrategyAnalysis {
   timeframes: {
@@ -28,16 +33,41 @@ export interface StrategyAnalysis {
   };
 }
 
-const SYSTEM_PROMPT = `You are a professional day trader analyzing charts with the following strategy:
-1. 1 Hour timeframe - Identify the main trend for SPY
-2. 1 Week timeframe - Identify support and resistance zones where candles close in proximity
-3. 1 Day timeframe - Look for unfilled gaps and candle patterns (engulfing or harami)
-4. 1 Hour timeframe - Verify support and resistance levels
-5. 5 Min timeframe - Identify high/low of previous day and pre-market
-6. 2 Min timeframe - Look for breaks above 9 EMA and resistance level for entry points
-7. Set stop loss at 9 EMA or consolidation low
+const SYSTEM_PROMPT = `You are a professional day trader analyzing charts. Analyze the provided chart and return a JSON object with the following structure:
 
-Analyze the chart and provide structured insights based on this strategy.`;
+{
+  "timeframes": {
+    "hourly": {
+      "trend": "bullish" or "bearish",
+      "ema9": number (current 9 EMA value)
+    },
+    "daily": {
+      "gaps": [
+        {
+          "price": number,
+          "filled": boolean
+        }
+      ],
+      "patterns": string[] (detected patterns like "bullish engulfing", "harami")
+    },
+    "weekly": {
+      "supportZones": number[],
+      "resistanceZones": number[]
+    }
+  },
+  "entryPoints": [
+    {
+      "price": number,
+      "condition": string (entry condition description)
+    }
+  ],
+  "stopLoss": {
+    "price": number,
+    "reason": string (stop loss reasoning)
+  }
+}
+
+Return ONLY the JSON object with no additional text or explanation.`;
 
 export async function analyzeChartWithStrategy(imageBase64: string): Promise<StrategyAnalysis> {
   try {
@@ -53,7 +83,7 @@ export async function analyzeChartWithStrategy(imageBase64: string): Promise<Str
           content: [
             {
               type: 'text',
-              text: 'Analyze this chart according to the specified day trading strategy.',
+              text: 'Analyze this chart according to the specified day trading strategy. Return the analysis as a JSON object.',
             },
             {
               type: 'image_url',
@@ -64,13 +94,13 @@ export async function analyzeChartWithStrategy(imageBase64: string): Promise<Str
           ],
         },
       ],
-      max_tokens: 500,
+      max_tokens: 1000,
       temperature: 0.1,
     });
 
-    // Parse and structure the response
-    const analysis = parseStrategyResponse(response.choices[0].message.content || '');
-    return analysis;
+    const content = response.choices[0].message.content || '';
+    console.log(content)
+    return parseStrategyResponse(content);
   } catch (error) {
     console.error('Error analyzing chart with strategy:', error);
     throw error;
@@ -78,34 +108,80 @@ export async function analyzeChartWithStrategy(imageBase64: string): Promise<Str
 }
 
 function parseStrategyResponse(content: string): StrategyAnalysis {
-  // In a real implementation, you would parse the content string
-  // and extract the relevant information. This is a placeholder.
+  try {
+    // Extract JSON from the response, handling potential markdown formatting
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No valid JSON found in response');
+    }
+
+    const jsonStr = jsonMatch[0];
+    const parsed = JSON.parse(jsonStr);
+
+    // Apply strict validation and transformation
+    return {
+      timeframes: {
+        hourly: {
+          trend: String(parsed.timeframes?.hourly?.trend || 'neutral').toLowerCase(),
+          ema9: Number(parsed.timeframes?.hourly?.ema9 || 0)
+        },
+        daily: {
+          gaps: Array.isArray(parsed.timeframes?.daily?.gaps) 
+            ? parsed.timeframes.daily.gaps.map(gap => ({
+                price: Number(gap.price || 0),
+                filled: Boolean(gap.filled)
+              }))
+            : [],
+          patterns: Array.isArray(parsed.timeframes?.daily?.patterns)
+            ? parsed.timeframes.daily.patterns.map(String)
+            : []
+        },
+        weekly: {
+          supportZones: Array.isArray(parsed.timeframes?.weekly?.supportZones)
+            ? parsed.timeframes.weekly.supportZones.map(Number)
+            : [],
+          resistanceZones: Array.isArray(parsed.timeframes?.weekly?.resistanceZones)
+            ? parsed.timeframes.weekly.resistanceZones.map(Number)
+            : []
+        }
+      },
+      entryPoints: Array.isArray(parsed.entryPoints)
+        ? parsed.entryPoints.map(point => ({
+            price: Number(point.price || 0),
+            condition: String(point.condition || '')
+          }))
+        : [],
+      stopLoss: {
+        price: Number(parsed.stopLoss?.price || 0),
+        reason: String(parsed.stopLoss?.reason || 'No stop loss specified')
+      }
+    };
+  } catch (error) {
+    console.error('Error parsing strategy response:', error);
+    return getDefaultAnalysis();
+  }
+}
+
+function getDefaultAnalysis(): StrategyAnalysis {
   return {
     timeframes: {
       hourly: {
-        trend: 'bullish',
-        ema9: 450.75,
+        trend: 'neutral',
+        ema9: 0
       },
       daily: {
-        gaps: [
-          { price: 448.32, filled: false },
-        ],
-        patterns: ['bullish engulfing'],
+        gaps: [],
+        patterns: []
       },
       weekly: {
-        supportZones: [445.50, 442.25],
-        resistanceZones: [452.75, 455.00],
-      },
+        supportZones: [],
+        resistanceZones: []
+      }
     },
-    entryPoints: [
-      {
-        price: 451.25,
-        condition: 'Break above 9 EMA with volume confirmation',
-      },
-    ],
+    entryPoints: [],
     stopLoss: {
-      price: 449.75,
-      reason: '9 EMA support level',
-    },
+      price: 0,
+      reason: 'Unable to determine stop loss'
+    }
   };
 }
